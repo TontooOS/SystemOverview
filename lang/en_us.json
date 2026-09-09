@@ -1,0 +1,8 @@
+{
+  "app.title": "SystemOverview",
+  "name": "SystemOverview",
+  "spec.chip.label": "Chip",
+  "spec.memory.label": "Memory",
+  "spec.kernel.label": "Kernel",
+  "button.more_info": "More Info..."
+}
