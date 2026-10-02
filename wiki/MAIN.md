@@ -1,13 +1,15 @@
 # SystemOverview – Wiki
 
-SystemOverview is the TontooOS About window: a 320x580 UIKit card with
-close/minimize controls, a drawn laptop illustration, a spec grid and a
-More Info button. It follows the live system color scheme and loads
-`en_us`/`de_de` strings from `lang/`.
+SystemOverview is the TontooOS About window: a 320x580 card with
+close/minimize lights drawn on the card itself, a laptop illustration, a
+spec grid and a More Info button. Rendering is TontooUI on Vello/WGPU and
+the theme follows the live system color scheme through the settings
+daemon. Strings come from `lang/en_us.json` and `lang/de_de.json` via the
+Accessibility framework.
 
 - Repository: https://github.com/TontooOS/TontooOS
 - License: TCL v27.0
-- Version: 0.1.0
+- Version: 27.0.0
 
 ## Feature Index
 
@@ -15,7 +17,7 @@ More Info button. It follows the live system color scheme and loads
 |---|---|---|
 | Main index | [MAIN.md](MAIN.md) | This page |
 | Rules | [RULE.md](RULE.md) | Development and usage rules |
-| SystemOverview | [SystemOverview.md](SystemOverview.md) | About card layout, colors and localization |
+| SystemOverview | [SystemOverview.md](SystemOverview.md) | About card layout, traffic lights, colors and localization |
 
 ## Quick Start
 
@@ -25,13 +27,24 @@ Run the About window from the repository root:
 cargo run
 ```
 
-The window follows the GNOME system theme live (Dark `#1d1d1d`, Light
-`#ececec`) and picks German strings when `LANG` starts with `de`.
+The window follows the live system theme (Dark `#1B2022` / `#D8D9D9`,
+Light `#FFFFFF` / `#272727`) and picks German strings when `LANG` starts
+with `de`.
 
 See [SystemOverview.md](SystemOverview.md) for details.
 
 ## Changelog
 
+- 2026-10-02: Ported from the GTK/UIKit stack to the TontooUI API
+  (Vello/WGPU). No `Titlebar`: the card draws its own close/minimize
+  traffic lights and doubles as the window drag handle. The 320x580 body
+  is now a 368x628 window (TontooUI keeps a 24 px transparent shadow
+  rim per side). Colors reduced to the theme background and text pair
+  (no secondary or pill colors). `lang/*.json` moved to the
+  Accessibility shape and load through `LangStore`, so `serde_json`,
+  `gtk4`, `glib` and `once_cell` are gone; the SDK features are
+  `TontooUI`, `Accessibility` and `CoreSettings`. See
+  [SystemOverview.md](SystemOverview.md).
 - 2026-09-08: FishPerms trust covers `/System/Applications/**` (all system
   apps, no per-app entries); ISO stages `systemoverview.app` as folder
   plus `~/Applications/SystemOverview.app` skel link.

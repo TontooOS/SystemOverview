@@ -1,8 +1,12 @@
 {
-  "app.title": "Systemübersicht",
+  "lang": "de_de",
   "name": "Systemübersicht",
-  "spec.chip.label": "Chip",
-  "spec.memory.label": "Arbeitsspeicher",
-  "spec.kernel.label": "Kernel",
-  "button.more_info": "Weitere Infos..."
+  "translations": {
+    "app.title": "SystemOverview",
+    "name": "Systemübersicht",
+    "spec.chip.label": "Chip",
+    "spec.memory.label": "Arbeitsspeicher",
+    "spec.kernel.label": "Kernel",
+    "button.more_info": "Weitere Infos..."
+  }
 }

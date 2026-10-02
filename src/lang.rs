@@ -1,15 +1,16 @@
-//! Minimal locale store for SystemOverview.
+//! Locale store for SystemOverview, built on Accessibility.
 //!
-//! Loads `lang/en_us.json` or `lang/de_de.json` based on the system locale
-//! (`LANGUAGE`, `LC_ALL`, `LANG`, `/etc/locale.conf`). Falls back to English
-//! when no file matches. Only `en_us` and `de_de` are supported.
+//! Loads `lang/en_us.json` and `lang/de_de.json` (Accessibility shape:
+//! `{"lang": ..., "translations": {...}}`) based on the system locale
+//! (`LANGUAGE`, `LC_ALL`, `LANG`, `/etc/locale.conf`). Falls back to
+//! English when no file matches. Only `en_us` and `de_de` are
+//! supported.
 
-use once_cell::sync::OnceCell;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
-static STRINGS: OnceCell<HashMap<String, String>> = OnceCell::new();
-static LOCALE: OnceCell<String> = OnceCell::new();
+use crate::Accessibility::{LangFile, LangStore};
+
+static LOCALE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Detect the system locale. Returns `de_de` for German, `en_us` otherwise.
 pub fn detect_locale() -> String {
@@ -33,10 +34,22 @@ pub fn detect_locale() -> String {
 }
 
 /// Candidate directories holding the `lang/` folder.
+///
+/// `$SYSTEMOVERVIEW_LANG_DIR` wins over everything (dev runs of the bare
+/// binary outside the project dir), then the usual candidates: the dev
+/// checkout (`lang/`, `Resources/lang`), the `.app` bundle layout
+/// (`<Name>.app/{App/binary, Resources/lang}`) and the installed path.
 fn lang_dirs() -> Vec<PathBuf> {
   let mut dirs = Vec::new();
+  if let Ok(env) = std::env::var("SYSTEMOVERVIEW_LANG_DIR") {
+    if !env.is_empty() {
+      dirs.push(PathBuf::from(env));
+    }
+  }
   if let Ok(cwd) = std::env::current_dir() {
     dirs.push(cwd.join("lang"));
+    // Dev layout with a Resources folder: <project>/Resources/lang.
+    dirs.push(cwd.join("Resources").join("lang"));
   }
   if let Ok(exe) = std::env::current_exe() {
     if let Some(parent) = exe.parent() {
@@ -52,37 +65,35 @@ fn lang_dirs() -> Vec<PathBuf> {
   dirs
 }
 
-fn load_map(locale: &str) -> HashMap<String, String> {
-  let file = format!("{locale}.json");
-  for dir in lang_dirs() {
-    let path = dir.join(&file);
-    if let Ok(content) = std::fs::read_to_string(&path) {
-      if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
-        return map;
-      }
-    }
-  }
-  HashMap::new()
-}
-
 /// Load strings for the detected locale. Safe to call multiple times.
 pub fn init() {
-  if STRINGS.get().is_some() {
+  if LOCALE.get().is_some() {
     return;
   }
   let locale = detect_locale();
-  let map = load_map(&locale);
+  let mut files: Vec<LangFile> = Vec::new();
+  for dir in lang_dirs() {
+    for code in ["en_us", "de_de"] {
+      let path = dir.join(format!("{code}.json"));
+      if let Ok(file) = LangFile::from_file(&path) {
+        if !files.iter().any(|f| f.lang == file.lang) {
+          files.push(file);
+        }
+      }
+    }
+  }
+  if !files.is_empty() {
+    let _ = LangStore::init(files, Some("en_us".to_string()));
+  }
   let _ = LOCALE.set(locale);
-  let _ = STRINGS.set(map);
 }
 
 /// Look up a localized string. Returns the key itself when missing.
 pub fn t(key: &str) -> String {
   init();
-  STRINGS
-    .get()
-    .and_then(|map| map.get(key))
-    .cloned()
+  let locale = LOCALE.get().cloned().unwrap_or_else(|| "en_us".to_string());
+  LangStore::instance()
+    .t(&locale, key, None)
     .unwrap_or_else(|| key.to_string())
 }
 
@@ -107,5 +118,24 @@ mod tests {
   fn missing_key_returns_key() {
     let value = t("missing.key.that.does.not.exist");
     assert_eq!(value, "missing.key.that.does.not.exist");
+  }
+
+  #[test]
+  fn project_files_translate_known_keys() {
+    // `cargo test` runs with the package root as cwd, so `lang/` is
+    // found and the Accessibility-shaped files must parse and resolve.
+    // Locale independent: both files must cover every card key, so no
+    // raw key ever reaches the UI.
+    for key in [
+      "app.title",
+      "spec.chip.label",
+      "spec.memory.label",
+      "spec.kernel.label",
+      "button.more_info",
+    ] {
+      let value = t(key);
+      assert!(!value.is_empty(), "{key} is empty");
+      assert_ne!(value, key, "{key} was not translated");
+    }
   }
 }

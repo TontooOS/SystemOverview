@@ -9,7 +9,7 @@
 //! so the UI never shows odd values like `63 GB`. Above 25 TB the real
 //! value is shown instead.
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 use crate::CoreSettings::SettingsProvider;
 
@@ -21,7 +21,7 @@ struct DaemonFacts {
   os_version: Option<String>,
 }
 
-static DAEMON_FACTS: OnceCell<DaemonFacts> = OnceCell::new();
+static DAEMON_FACTS: OnceLock<DaemonFacts> = OnceLock::new();
 
 fn daemon_facts() -> &'static DaemonFacts {
   DAEMON_FACTS.get_or_init(|| {
