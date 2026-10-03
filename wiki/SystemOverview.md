@@ -1,11 +1,10 @@
 # SystemOverview
 
 The About window of TontooOS. A fixed 320x580 card that shows the two
-traffic lights, the device name, a laptop illustration, a two-column spec
-grid and a pill-shaped More Info button. There is no `Titlebar` element:
-the card draws its own close/minimize lights, so there is no title text
-and no maximize button, and the light row doubles as the window drag
-handle.
+traffic lights, the device name, a laptop illustration and a two-column
+spec grid. There is no `Titlebar` element: the card draws its own
+close/minimize lights, so there is no title text and no maximize button,
+and the light row doubles as the window drag handle.
 
 Rendering is TontooUI on Vello/WGPU. The shell owns the window
 background, the rounded body, the shadow rim and the frame, so this app
@@ -42,9 +41,7 @@ From top to bottom the content stack contains:
 4. Device name (`sysinfo::device_name`, 22 px bold, centered)
 5. 14 px gap
 6. Spec grid (4 rows, label right-aligned, value left-aligned, 12 px)
-7. 12 px gap
-8. More Info capsule button (no-op press)
-9. Expanding `Spacer` (takes the leftover height)
+7. Expanding `Spacer` (takes the leftover height)
 
 Fixed gaps are `Spacer::new().min_size(px).factor(0.0)`; the trailing
 filler keeps the default factor 1.0. The content is centered
@@ -58,7 +55,7 @@ let mut stack = VStack::new()
   .child(Laptop::new(dark))
   .child(gap(GAP_LAPTOP))
   .child(
-    BasicText::new(sysinfo::device_name())
+    themed_text(&sysinfo::device_name(), mode)
       .style(TextStyle::Title2)
       .size(TITLE_SIZE)
       .weight(TITLE_WEIGHT)
@@ -66,11 +63,12 @@ let mut stack = VStack::new()
       .width(CARD_W),
   )
   .child(gap(GAP_TITLE))
-  .child(spec_grid())
-  .child(gap(GAP_GRID))
-  .child(button)
+  .child(spec_grid(mode))
   .child(Spacer::new());
 ```
+
+There is no More Info button: the card ends after the spec grid and the
+trailing filler.
 
 ## Traffic Lights
 
@@ -133,6 +131,28 @@ fourth row with the OS version as its value. All four use
 `TextStyle::Caption` (12 px) and `TextForeground::Primary`; there are no
 secondary colors.
 
+### Themed text
+
+Every label is built through `themed_text`, never `BasicText::new`
+directly:
+
+```rust
+fn themed_text(content: &str, mode: ThemeMode) -> BasicText {
+  let mut text = BasicText::new(content);
+  text.set_theme(mode);
+  text
+}
+```
+
+`BasicText` resolves `TextForeground::Primary` against its **own**
+`dark` flag, which defaults to `true`. A label that skips `set_theme`
+keeps painting the dark-mode text (`#D8D9D9`) after the card switched to
+the white light body, which makes the whole card look blank.
+`about::tests::primary_text_depends_on_the_mode` covers this.
+`set_focused` is not called here: `VStack::set_focused` forwards the
+window focus to every child on its own, so unfocused windows still
+desaturate.
+
 ## Laptop Illustration
 
 `Laptop` is an enum over the two variants, both measuring 240x217 so the
@@ -162,8 +182,8 @@ lines up with the PNG variant.
 ## Colors
 
 Only the theme background and text pair is used. There are no secondary
-text or pill colors: the spec labels and values share `TextForeground::Primary`,
-and the button uses the TontooUI default fill plus the theme accent.
+text colors: the spec labels and values share
+`TextForeground::Primary`.
 
 | Token | Dark | Light |
 |---|---|---|
@@ -174,25 +194,11 @@ and the button uses the TontooUI default fill plus the theme accent.
 crossfades over 0.25 s, and `App::background` returns the blended body
 color every frame, so a mode switch animates. Elements bake their colors
 in at build time, so `AboutApp::sync_theme` rebuilds the content stack
-only when `Theme::mode` or `Theme::accent` actually changes; an idle
-window never re-lays out text. `App::set_focused` is forwarded to
-`VStack::set_focused`, which reaches every child.
+only when `Theme::mode` changes; an idle window never re-lays out text.
+`App::set_focused` is forwarded to `VStack::set_focused`, which reaches
+every child.
 
 All text uses the system font, which is SF Pro Display on TontooOS.
-
-## More Info Button
-
-```rust
-let mut button = Button::new(lang::t("button.more_info"))
-  .shape(ButtonShape::Capsule)
-  // "More Info..." is intentionally a no-op, as before.
-  .on_press(|| {});
-button.set_theme(accent, dark);
-```
-
-`ButtonShape::Capsule` replaces the old `corner_radius(14.0)`. The press
-handler is an empty closure on purpose: the action was a no-op before the
-port and still is.
 
 ## Localization
 
@@ -208,8 +214,7 @@ in the Accessibility shape:
     "name": "SystemOverview",
     "spec.chip.label": "Chip",
     "spec.memory.label": "Memory",
-    "spec.kernel.label": "Kernel",
-    "button.more_info": "More Info..."
+    "spec.kernel.label": "Kernel"
   }
 }
 ```
@@ -235,7 +240,6 @@ bare binary outside the project dir); otherwise `lang/`,
 | `spec.chip.label` | `Chip` | `Chip` |
 | `spec.memory.label` | `Memory` | `Arbeitsspeicher` |
 | `spec.kernel.label` | `Kernel` | `Kernel` |
-| `button.more_info` | `More Info...` | `Weitere Infos...` |
 
 ### `t(key)`
 
@@ -279,15 +283,35 @@ assemble the `.app` bundle:
 tbuild app /path/to/SystemOverview
 ```
 
-The bundle contains the release binary (`App/`), the icon and
-`Resources/` (`laptop.png`, `app-icon.png`, `lang/`). Both the language
-lookup and the illustration lookup cover the bundle layout
+### Icon
+
+The project icon is a finished `Resources/icon.tico` (4.2 MB, one
+recolorable layer), not a raster. TBuild passes a `.tico` source through
+byte for byte, so the bundled `App/icon.tico` is the repo file, unchanged.
+
+| Property | Value |
+|---|---|
+| Background | solid `#1B2022` (the TontooOS dark body color) |
+| Layer | `info.circle` SF Symbol, 340 px, centered on the 1024 px canvas |
+| Layer color | `#FFFFFF`, stored as `default_color` (recolorable) |
+| Source assets | `COREICON_ASSETS_DIR`, or the system resources on TontooOS |
+
+Because the symbol layer is recolorable, the runtime tint still works and
+the Apple app-icon finish is added by `TicoIcon::render` rather than
+baked into the stored layer.
+
+### Bundle Contents
+
+The bundle carries the release binary (`App/`), the icon
+(`App/icon.tico` plus a `Resources/icon.tico` copy) and the remaining
+`Resources/` (`laptop.png`, `lang/`). Both the language lookup and the
+illustration lookup cover the bundle layout
 (`<Name>.app/Resources/...`), dev checkouts (`lang/`, `Resources/`) and
 installed files (`/usr/share/systemoverview/`).
 
 ## Tests
 
-`cargo test` runs 17 tests without a display:
+`cargo test` runs 18 tests without a display:
 
 | Test | Covers |
 |---|---|
@@ -297,6 +321,7 @@ installed files (`/usr/share/systemoverview/`).
 | `about::laptop_keeps_the_documented_box` | Both variants measure 240x217 |
 | `about::content_fits_the_fixed_card` | Content never exceeds 320x580 |
 | `about::card_children_match_the_layout_contract` | Stack child order and types |
+| `about::primary_text_depends_on_the_mode` | Primary text really differs per mode |
 | `about::spec_row_columns_are_fixed` | Row width stays inside the card |
 | `lang::project_files_translate_known_keys` | Both lang files cover every card key |
 | `sysinfo::*` | Memory snapping, chassis mapping, non-empty labels |
@@ -308,16 +333,15 @@ cargo run
 LANG=de_DE.UTF-8 cargo run
 ```
 
-The first command shows English strings, the second German strings. The
-`More Info...` press is intentionally a no-op.
+The first command shows English strings, the second German strings.
 
 ## Cross References
 
 - [MAIN.md](MAIN.md) -- wiki entry point
 - TontooUI `elements::titlebar` constants -- traffic light metrics and
   colors reused by `TrafficLights`
-- TontooUI `elements::Button` with `ButtonShape::Capsule` -- the More Info
-  pill
+- TontooUI `elements::BasicText` -- `set_theme` and the
+  `TextForeground::Primary` resolution
 - TontooUI `elements::FileImage` -- the bundled `laptop.png`
 - TontooUI `theme::ThemeWatcher` -- live dark/light plus accent
 - TontooUI `renderer::window::App` -- `background`, `drag_region`,

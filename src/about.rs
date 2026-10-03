@@ -2,10 +2,9 @@
 //!
 //! Reproduces the macOS-style About window: the two traffic lights drawn
 //! straight onto the card (no `Titlebar` element, so no title text and no
-//! maximize light), the laptop illustration, the device name, the spec
-//! grid and the More Info pill button. The window background, rounded
-//! body and frame come from the TontooUI shell, so this module only
-//! paints content.
+//! maximize light), the laptop illustration, the device name and the spec
+//! grid. The window background, rounded body and frame come from the
+//! TontooUI shell, so this module only paints content.
 //!
 //! Colors come from the live theme palette (Dark `#1B2022` / `#D8D9D9`,
 //! Light `#FFFFFF` / `#272727`); no secondary colors are invented. All
@@ -16,8 +15,8 @@ use std::path::PathBuf;
 
 use crate::TontooUI::Color;
 use crate::TontooUI::elements::{
-  Align, BasicText, Button, ButtonShape, FileImage, GradientPaint, HStack, ImageFit, Spacer,
-  TextAlignment, TextForeground, TextStyle, TrafficAction, VStack, View,
+  Align, BasicText, FileImage, GradientPaint, HStack, ImageFit, Spacer, TextAlignment,
+  TextForeground, TextStyle, TrafficAction, VStack, View,
 };
 use crate::TontooUI::elements::titlebar::{
   TRAFFIC_CLOSE, TRAFFIC_GAP, TRAFFIC_GLYPH_CLOSE, TRAFFIC_GLYPH_MINIMIZE, TRAFFIC_INACTIVE,
@@ -26,6 +25,7 @@ use crate::TontooUI::elements::titlebar::{
 use crate::TontooUI::kurbo::{Affine, Circle, RoundedRect};
 use crate::TontooUI::peniko::{Brush, Fill};
 use crate::TontooUI::renderer::{FontSystem, ImageLoader};
+use crate::TontooUI::theme::{Theme, ThemeMode};
 use crate::TontooUI::Scene;
 use crate::lang;
 use crate::sysinfo;
@@ -50,11 +50,11 @@ const LABEL_W: f32 = 88.0;
 const VALUE_W: f32 = 150.0;
 const GRID_GAP: f32 = 10.0;
 const ROW_GAP: f32 = 4.0;
-/// Fixed vertical gaps, matching the old card rhythm.
+/// Fixed vertical gaps, matching the old card rhythm. The last gap after
+/// the spec grid was only there for the removed More Info button.
 const GAP_TOP: f32 = 12.0;
 const GAP_LAPTOP: f32 = 10.0;
 const GAP_TITLE: f32 = 14.0;
-const GAP_GRID: f32 = 12.0;
 
 // ── resources ───────────────────────────────────────────────────────
 
@@ -492,39 +492,62 @@ impl View for DrawnLaptop {
 
 /// One spec row: label right-aligned in a fixed column, value
 /// left-aligned and wrapping in the next column (12 pt, as before).
-fn spec_row(label: &str, value: &str) -> HStack {
-  HStack::new().spacing(GRID_GAP).align(Align::Center).child(
-    BasicText::new(label)
-      .style(TextStyle::Caption)
-      .width(LABEL_W)
-      .alignment(TextAlignment::Trailing),
-  )
-  .child(
-    BasicText::new(value)
-      .style(TextStyle::Caption)
-      .width(VALUE_W)
-      .alignment(TextAlignment::Leading),
-  )
+/// A `BasicText` wired to the live theme.
+///
+/// `BasicText` resolves `TextForeground::Primary` against its own `dark`
+/// flag, which defaults to `true`, so every label needs `set_theme` at
+/// build time or light mode keeps painting dark-mode text on a white
+/// body. `set_focused` is not called here: `VStack::set_focused`
+/// forwards the window focus to every child on its own.
+fn themed_text(content: &str, mode: ThemeMode) -> BasicText {
+  let mut text = BasicText::new(content);
+  text.set_theme(mode);
+  text
+}
+
+fn spec_row(label: &str, value: &str, mode: ThemeMode) -> HStack {
+  HStack::new()
+    .spacing(GRID_GAP)
+    .align(Align::Center)
+    .child(
+      themed_text(label, mode)
+        .style(TextStyle::Caption)
+        .width(LABEL_W)
+        .alignment(TextAlignment::Trailing),
+    )
+    .child(
+      themed_text(value, mode)
+        .style(TextStyle::Caption)
+        .width(VALUE_W)
+        .alignment(TextAlignment::Leading),
+    )
 }
 
 /// The four spec rows, centered as a block.
-fn spec_grid() -> VStack {
+fn spec_grid(mode: ThemeMode) -> VStack {
   VStack::new()
     .spacing(ROW_GAP)
     .align(Align::Center)
     .child(spec_row(
       &lang::t("spec.chip.label"),
       &sysinfo::processor(),
+      mode,
     ))
     .child(spec_row(
       &lang::t("spec.memory.label"),
       &sysinfo::memory_label(),
+      mode,
     ))
     .child(spec_row(
       &lang::t("spec.kernel.label"),
       &sysinfo::kernel_version(),
+      mode,
     ))
-    .child(spec_row(&sysinfo::os_name(), &sysinfo::os_version()))
+    .child(spec_row(
+      &sysinfo::os_name(),
+      &sysinfo::os_version(),
+      mode,
+    ))
 }
 
 /// Fixed-height gap (flex 0, so the stack gives it no leftover space).
@@ -532,39 +555,32 @@ fn gap(px: f32) -> Spacer {
   Spacer::new().min_size(px).factor(0.0)
 }
 
-/// Build the card content for one theme: illustration, device name,
-/// spec grid and the More Info pill. The traffic lights are drawn by
-/// the caller (they are the drag handle, so they live outside the
-/// stack), and the content starts `LIGHTS_H` below the viewport top.
+/// Build the card content for one theme: illustration, device name and
+/// spec grid. The traffic lights are drawn by the caller (they are the
+/// drag handle, so they live outside the stack), and the content starts
+/// `LIGHTS_H` below the viewport top.
 ///
 /// The content keeps the old vertical rhythm and ends in an expanding
 /// spacer, so it stays top-aligned inside the fixed 320x580 body.
-pub fn build_content(accent: Color, dark: bool) -> VStack {
-  let mut button = Button::new(lang::t("button.more_info"))
-    .shape(ButtonShape::Capsule)
-    // "More Info..." is intentionally a no-op, as before.
-    .on_press(|| {});
-  button.set_theme(accent, dark);
+pub fn build_content(theme: Theme) -> VStack {
+  let mode = theme.mode;
 
   VStack::new()
     .spacing(0.0)
     .align(Align::Center)
     .child(gap(GAP_TOP))
-    .child(Laptop::new(dark))
+    .child(Laptop::new(mode == ThemeMode::Dark))
     .child(gap(GAP_LAPTOP))
     .child(
-      BasicText::new(sysinfo::device_name())
+      themed_text(&sysinfo::device_name(), mode)
         .style(TextStyle::Title2)
         .size(TITLE_SIZE)
         .weight(TITLE_WEIGHT)
-        .foreground(TextForeground::Primary)
         .alignment(TextAlignment::Center)
         .width(CARD_W),
     )
     .child(gap(GAP_TITLE))
-    .child(spec_grid())
-    .child(gap(GAP_GRID))
-    .child(button)
+    .child(spec_grid(mode))
     // Trailing filler: pushes the content to the top of the card.
     .child(Spacer::new())
 }
@@ -631,13 +647,12 @@ mod tests {
 
   #[test]
   fn card_children_match_the_layout_contract() {
-    let mut stack = build_content(Color::from_rgb8(0x00, 0x7a, 0xff), true);
-    // gap, laptop, gap, title, gap, grid, gap, button, filler.
-    assert_eq!(stack.len(), 9);
+    let mut stack = build_content(Theme::default());
+    // gap, laptop, gap, title, gap, grid, filler.
+    assert_eq!(stack.len(), 7);
     assert!(stack.child_mut::<Laptop>(1).is_some());
     assert!(stack.child_mut::<BasicText>(3).is_some());
     assert!(stack.child_mut::<VStack>(5).is_some());
-    assert!(stack.child_mut::<Button>(7).is_some());
     // The grid holds the four spec rows.
     let grid = stack.child_mut::<VStack>(5).expect("grid");
     assert_eq!(grid.len(), 4);
@@ -645,9 +660,33 @@ mod tests {
   }
 
   #[test]
+  fn primary_text_depends_on_the_mode() {
+    // Regression test: `BasicText` resolves `TextForeground::Primary`
+    // against its own `dark` flag, which defaults to `true`. So every
+    // label has to go through `themed_text` (which calls `set_theme`) or
+    // light mode paints dark-mode text on the white body and the card
+    // looks blank. `BasicText` exposes no public mode getter, so this
+    // asserts the reason the wiring is required; the card shape is
+    // covered by `card_children_match_the_layout_contract` for both
+    // modes.
+    let dark = TextForeground::Primary.resolve(ThemeMode::Dark, true);
+    let light = TextForeground::Primary.resolve(ThemeMode::Light, true);
+    assert_ne!(dark, light, "the two modes must resolve differently");
+
+    // Both modes build the same card.
+    for mode in [ThemeMode::Dark, ThemeMode::Light] {
+      let stack = build_content(Theme {
+        mode,
+        ..Theme::default()
+      });
+      assert_eq!(stack.len(), 7, "{mode:?}");
+    }
+  }
+
+  #[test]
   fn content_fits_the_fixed_card() {
     let mut fonts = FontSystem::new();
-    let mut stack = build_content(Color::from_rgb8(0x00, 0x7a, 0xff), true);
+    let mut stack = build_content(Theme::default());
     let (w, h) = stack.measure(&mut fonts);
     // The window is fixed at 320x580, so the content must never be
     // wider or taller than the body (nothing scrolls in this card).
@@ -658,7 +697,7 @@ mod tests {
 
   #[test]
   fn spec_row_columns_are_fixed() {
-    let mut row = spec_row("Memory", "16 GB");
+    let mut row = spec_row("Memory", "16 GB", ThemeMode::Dark);
     assert_eq!(row.len(), 2);
     let mut fonts = FontSystem::new();
     // The row measures to label + gap + value, and stays inside the card.

@@ -1,9 +1,9 @@
 //! SystemOverview: TontooOS About window on the TontooUI renderer.
 //!
 //! A 320x580 card with the two traffic lights, the laptop illustration,
-//! the device name, the spec grid (Chip, Memory, Kernel, TontooOS) and a
-//! More Info button. Rendering is TontooUI on Vello/WGPU: the shell owns
-//! the window background, rounded body and frame, so the app only paints
+//! the device name and the spec grid (Chip, Memory, Kernel, TontooOS).
+//! Rendering is TontooUI on Vello/WGPU: the shell owns the window
+//! background, rounded body and frame, so the app only paints
 //! content. The theme follows the settings daemon live through
 //! `ThemeWatcher` (Dark `#1B2022` / Light `#FFFFFF`).
 //!
@@ -21,7 +21,7 @@ use crate::TontooUI::Color;
 use crate::TontooUI::elements::{TrafficAction, View, VStack};
 use crate::TontooUI::renderer::window::{App, Viewport, WindowCommand, run};
 use crate::TontooUI::renderer::{FontSystem, ImageLoader};
-use crate::TontooUI::theme::{Theme, ThemeMode, ThemeWatcher};
+use crate::TontooUI::theme::{Theme, ThemeWatcher};
 use crate::TontooUI::Scene;
 
 /// Window size: the 320x580 card plus the 24 px frame margin per side.
@@ -47,12 +47,14 @@ impl AboutApp {
   fn new() -> Self {
     let mut watcher = ThemeWatcher::new();
     // The content bakes its colors in at build time, so probe the theme
-    // before the first frame.
+    // before the first frame. The first `poll` opens the daemon
+    // subscription, so the mode can still be the default until the next
+    // frame; `sync_theme` rebuilds as soon as it differs.
     watcher.poll(0.0);
     let applied = watcher.theme();
     Self {
       lights: about::TrafficLights::new(),
-      content: about::build_content(applied.accent.color(), applied.mode == ThemeMode::Dark),
+      content: about::build_content(applied),
       watcher,
       applied,
       focused: true,
@@ -61,17 +63,17 @@ impl AboutApp {
     }
   }
 
-  /// Rebuild the content when the daemon switches mode or accent: every
-  /// element bakes its colors in at build time. The palette itself
-  /// crossfades per frame through `App::background` and needs no
-  /// rebuild, so an idle window never re-lays out text.
+  /// Rebuild the content when the daemon switches mode: every element
+  /// bakes its colors in at build time. The palette itself crossfades
+  /// per frame through `App::background` and needs no rebuild, so an
+  /// idle window never re-lays out text.
   fn sync_theme(&mut self) {
     let theme = self.watcher.theme();
-    if theme.mode == self.applied.mode && theme.accent == self.applied.accent {
+    if theme.mode == self.applied.mode {
       return;
     }
     self.applied = theme;
-    self.content = about::build_content(theme.accent.color(), theme.mode == ThemeMode::Dark);
+    self.content = about::build_content(theme);
     self.content.set_focused(self.focused);
   }
 }

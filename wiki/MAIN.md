@@ -1,11 +1,11 @@
 # SystemOverview – Wiki
 
 SystemOverview is the TontooOS About window: a 320x580 card with
-close/minimize lights drawn on the card itself, a laptop illustration, a
-spec grid and a More Info button. Rendering is TontooUI on Vello/WGPU and
-the theme follows the live system color scheme through the settings
-daemon. Strings come from `lang/en_us.json` and `lang/de_de.json` via the
-Accessibility framework.
+close/minimize lights drawn on the card itself, a laptop illustration and
+a spec grid. Rendering is TontooUI on Vello/WGPU and the theme follows
+the live system color scheme through the settings daemon. Strings come
+from `lang/en_us.json` and `lang/de_de.json` via the Accessibility
+framework.
 
 - Repository: https://github.com/TontooOS/TontooOS
 - License: TCL v27.0
@@ -35,6 +35,24 @@ See [SystemOverview.md](SystemOverview.md) for details.
 
 ## Changelog
 
+- 2026-10-02: The app icon is now a finished `Resources/icon.tico`
+  (solid `#1B2022` plus one recolorable white `info.circle` SF Symbol
+  layer) instead of `Resources/app-icon.png`, so the bundle no longer
+  re-encodes it on every build. Needs the TBuild `.tico` pass-through;
+  the PNG source path is gone. See [SystemOverview.md](SystemOverview.md).
+- 2026-10-02: Fixed light mode. `BasicText` resolves
+  `TextForeground::Primary` against its own `dark` flag, which defaults
+  to `true`, and every label was built with `BasicText::new`, so light
+  mode kept painting dark-mode text (`#D8D9D9`) on the white body and
+  the card looked blank. All labels now go through `about::themed_text`,
+  which calls `set_theme`. The removed More Info button had the same
+  cause plus a missing `set_palette` (`Button::set_theme` only sets the
+  accent and the press direction, the fill comes from `set_palette`).
+  See [SystemOverview.md](SystemOverview.md).
+- 2026-10-02: Removed the More Info button and the dead
+  `button.more_info` lang key (both locales plus the `Resources/lang/`
+  copies). The card now ends after the spec grid. See
+  [SystemOverview.md](SystemOverview.md).
 - 2026-10-02: Ported from the GTK/UIKit stack to the TontooUI API
   (Vello/WGPU). No `Titlebar`: the card draws its own close/minimize
   traffic lights and doubles as the window drag handle. The 320x580 body

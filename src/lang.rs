@@ -131,7 +131,6 @@ mod tests {
       "spec.chip.label",
       "spec.memory.label",
       "spec.kernel.label",
-      "button.more_info",
     ] {
       let value = t(key);
       assert!(!value.is_empty(), "{key} is empty");
