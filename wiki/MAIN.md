@@ -35,6 +35,11 @@ See [SystemOverview.md](SystemOverview.md) for details.
 
 ## Changelog
 
+- 2026-10-02: Rebuilt the committed `SystemOverview.app`; it was still
+  the pre-port GTK build (629909 bytes). Now 28363892 bytes with the
+  TontooUI binary, `App/icon.tico` plus `Resources/icon.tico`,
+  `Resources/laptop.png` and `Resources/lang/`. See
+  [SystemOverview.md](SystemOverview.md).
 - 2026-10-02: The app icon is now a finished `Resources/icon.tico`
   (solid `#1B2022` plus one recolorable white `info.circle` SF Symbol
   layer) instead of `Resources/app-icon.png`, so the bundle no longer
